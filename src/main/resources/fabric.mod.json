@@ -1,0 +1,40 @@
+{
+	"schemaVersion": 1,
+	"id": "surprisedrops",
+	"version": "${version}",
+	"name": "PA9 Surprise Drops",
+	"description": "Every drop becomes a random item in a random quantity. Each loot table (blocks, mobs, chests, fishing and more) is assigned one replacement item from the world seed, and every drop multiplies the vanilla amount by a random value in a configurable range. Shuffle re-rolls every assignment at once.",
+	"authors": [
+		"PersonalAtom9"
+	],
+	"contact": {
+		"homepage": "https://www.youtube.com/@PersonalAtom9",
+		"sources": ""
+	},
+	"license": "MIT",
+	"icon": "assets/surprisedrops/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"com.iceyatom.surprisedrops.SurpriseDrops"
+		],
+		"client": [
+			"com.iceyatom.surprisedrops.client.SurpriseDropsClient"
+		],
+		"modmenu": [
+			"com.iceyatom.surprisedrops.client.ModMenuIntegration"
+		]
+	},
+	"mixins": [
+		"surprisedrops.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.5",
+		"fabric-api": ">=0.161.0",
+		"minecraft": "~26.3",
+		"java": ">=25"
+	},
+	"suggests": {
+		"modmenu": "*"
+	}
+}

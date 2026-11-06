@@ -1,0 +1,40 @@
+{
+	"key.category.surprisedrops.main": "PA9 Surprise Drops",
+	"key.surprisedrops.open_config": "Open Surprise Drops settings",
+
+	"surprisedrops.button.pause": "Surprise Drops",
+
+	"surprisedrops.screen.title": "PA9 Surprise Drops",
+	"surprisedrops.screen.master": "Surprise Drops",
+	"surprisedrops.screen.min": "Minimum multiplier",
+	"surprisedrops.screen.max": "Maximum multiplier",
+	"surprisedrops.screen.categories": "Drop categories",
+	"surprisedrops.screen.blocks": "Blocks",
+	"surprisedrops.screen.mobs": "Mobs",
+	"surprisedrops.screen.containers": "Containers",
+	"surprisedrops.screen.other": "Other",
+	"surprisedrops.screen.seed": "World seed (number or text)",
+	"surprisedrops.screen.seed_hint": "Leave blank to keep the current seed",
+	"surprisedrops.screen.shuffle": "Shuffle",
+	"surprisedrops.screen.shuffle_confirm_title": "Shuffle every assignment?",
+	"surprisedrops.screen.shuffle_confirm_body": "A new random seed will reassign every loot table. Items already dropped and chests already opened will not change.",
+	"surprisedrops.screen.error_range": "Multipliers must be whole numbers from 1 to 10,000",
+	"surprisedrops.screen.error_order": "The minimum must not be greater than the maximum",
+	"surprisedrops.screen.warning_large": "Warning: very large multipliers can create many item entities and affect performance",
+	"surprisedrops.screen.read_only": "Read-only: only operators can change these settings",
+	"surprisedrops.screen.no_server": "Read-only: join a world running Surprise Drops to edit its settings",
+
+	"surprisedrops.message.on": "Surprise Drops: ON",
+	"surprisedrops.message.off": "Surprise Drops: OFF",
+	"surprisedrops.message.saved": "Surprise Drops: settings saved",
+	"surprisedrops.message.shuffled": "Surprise Drops shuffled. New seed: %s",
+	"surprisedrops.message.seed_set": "Surprise Drops seed set to %s",
+	"surprisedrops.message.failure": "[Surprise Drops] Error replacing loot for %s; vanilla drops kept. See the log.",
+	"surprisedrops.message.failure_disabled": "[Surprise Drops] Error replacing loot for %s. Three failures in a row: Surprise Drops is disabled until restart.",
+
+	"surprisedrops.command.invalid_range": "Multipliers must satisfy 1 <= min <= max <= 10000",
+	"surprisedrops.command.multiplier": "Surprise Drops multiplier range set to %s-%s",
+	"surprisedrops.command.reloaded": "Reloaded surprisedrops.toml (replacement pool: %s items)",
+	"surprisedrops.command.unknown_table": "Unknown loot table: %s",
+	"surprisedrops.command.lookup": "%s -> %s, multiplier %s-%s, category %s, mod %s"
+}
