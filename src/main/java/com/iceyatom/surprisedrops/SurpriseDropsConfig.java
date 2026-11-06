@@ -148,8 +148,9 @@ public final class SurpriseDropsConfig {
 			sb.append("  \"").append(escape(id)).append("\",\n");
 		}
 		sb.append("]\n\n");
-		sb.append("# Only choose items a survival player can obtain: skips spawn eggs, bedrock, spawners, infested\n");
-		sb.append("# blocks, petrified oak slab, test blocks and other creative/command-only items.\n");
+		sb.append("# Default for new worlds: only choose items a survival player can obtain (skips spawn eggs,\n");
+		sb.append("# bedrock, spawners, infested blocks, petrified oak slab, test blocks and other creative-only\n");
+		sb.append("# items). Change it per world in the screen; changing it there reshuffles the seed.\n");
 		sb.append("survival_items_only = ").append(survivalItemsOnly).append("\n\n");
 		sb.append("# Default key for opening the configuration screen, e.g. \"key.keyboard.o\", or \"unbound\".\n");
 		sb.append("# Also rebindable in the vanilla Controls screen.\n");

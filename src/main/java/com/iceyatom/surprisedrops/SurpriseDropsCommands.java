@@ -1,6 +1,7 @@
 package com.iceyatom.surprisedrops;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.BoolArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.context.CommandContext;
@@ -40,6 +41,9 @@ public final class SurpriseDropsCommands {
 						.then(Commands.argument("min", IntegerArgumentType.integer(SurpriseDropsHelper.MULTIPLIER_MIN_LIMIT, SurpriseDropsHelper.MULTIPLIER_MAX_LIMIT))
 								.then(Commands.argument("max", IntegerArgumentType.integer(SurpriseDropsHelper.MULTIPLIER_MIN_LIMIT, SurpriseDropsHelper.MULTIPLIER_MAX_LIMIT))
 										.executes(SurpriseDropsCommands::multiplier))))
+				.then(Commands.literal("survivalitems")
+						.then(Commands.argument("value", BoolArgumentType.bool())
+								.executes(SurpriseDropsCommands::survivalItems)))
 				.then(Commands.literal("reload").executes(SurpriseDropsCommands::reload))
 				.then(Commands.literal("lookup")
 						.then(Commands.argument("loot_table", IdentifierArgument.id())
@@ -93,11 +97,26 @@ public final class SurpriseDropsCommands {
 		return 1;
 	}
 
+	/** Changes which items can be chosen. Always reshuffles the seed (see {@link SurpriseDropsServer#setSurvivalItemsOnly}). */
+	private static int survivalItems(CommandContext<CommandSourceStack> ctx) {
+		CommandSourceStack source = ctx.getSource();
+		boolean value = BoolArgumentType.getBool(ctx, "value");
+		MinecraftServer server = source.getServer();
+		if (WorldState.get(server).settings().survivalItemsOnly() == value) {
+			source.sendFailure(Component.translatable("surprisedrops.command.survival_unchanged",
+					Component.translatable(value ? "options.on" : "options.off")));
+			return 0;
+		}
+		long seed = SurpriseDropsServer.setSurvivalItemsOnly(server, value);
+		source.sendSuccess(() -> SurpriseDropsServer.survivalMessage(value, seed), true);
+		return 1;
+	}
+
 	private static int reload(CommandContext<CommandSourceStack> ctx) {
 		CommandSourceStack source = ctx.getSource();
 		SurpriseDropsConfig.load();
-		LootReplacer.rebuildPool();
-		source.sendSuccess(() -> Component.translatable("surprisedrops.command.reloaded", LootReplacer.pool().size()), true);
+		LootReplacer.rebuildPool(source.getServer());
+		source.sendSuccess(() -> Component.translatable("surprisedrops.command.reloaded", LootReplacer.pool(WorldState.get(source.getServer()).settings().survivalItemsOnly()).size()), true);
 		return 1;
 	}
 
@@ -114,13 +133,14 @@ public final class SurpriseDropsCommands {
 		DropSettings settings = WorldState.get(server).settings();
 		LootTable table = server.reloadableRegistries().getLootTable(key);
 		DropCategory category = DropCategory.of(table.getParamSet());
-		Item item = LootReplacer.assignedItem(settings.seed(), id);
+		Item item = LootReplacer.assignedItem(settings, id);
 		Component itemName = item == null ? Component.literal("-") : Component.literal(BuiltInRegistries.ITEM.getKey(item).toString()).withStyle(ChatFormatting.AQUA);
 		String categoryName = category == null ? "none (always vanilla)" : category.name().toLowerCase(Locale.ROOT)
 				+ (settings.affects(category) ? "" : " (category OFF)");
 		source.sendSuccess(() -> Component.translatable("surprisedrops.command.lookup", id.toString(), itemName,
 				settings.multiplierMin(), settings.multiplierMax(), categoryName,
-				Component.translatable(settings.enabled() ? "options.on" : "options.off")), false);
+				Component.translatable(settings.enabled() ? "options.on" : "options.off"),
+				Component.translatable(settings.survivalItemsOnly() ? "options.on" : "options.off")), false);
 		return 1;
 	}
 }

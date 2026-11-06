@@ -26,7 +26,7 @@ public final class SurpriseDropsPayloads {
 	 */
 	public record ApplySettings(boolean enabled, int multiplierMin, int multiplierMax,
 								boolean affectBlocks, boolean affectMobs, boolean affectContainers, boolean affectOther,
-								String seedText) implements CustomPacketPayload {
+								boolean survivalItemsOnly, String seedText) implements CustomPacketPayload {
 		public static final Type<ApplySettings> TYPE = payloadType("apply_settings");
 		public static final StreamCodec<RegistryFriendlyByteBuf, ApplySettings> CODEC = StreamCodec.of(
 				(buf, p) -> {
@@ -37,10 +37,11 @@ public final class SurpriseDropsPayloads {
 					buf.writeBoolean(p.affectMobs);
 					buf.writeBoolean(p.affectContainers);
 					buf.writeBoolean(p.affectOther);
+					buf.writeBoolean(p.survivalItemsOnly);
 					buf.writeUtf(p.seedText, 256);
 				},
 				buf -> new ApplySettings(buf.readBoolean(), buf.readVarInt(), buf.readVarInt(),
-						buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readUtf(256))
+						buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readUtf(256))
 		);
 
 		@Override
@@ -54,6 +55,58 @@ public final class SurpriseDropsPayloads {
 		public static final Type<Shuffle> TYPE = payloadType("shuffle");
 		public static final StreamCodec<RegistryFriendlyByteBuf, Shuffle> CODEC = StreamCodec.of((buf, p) -> {
 		}, buf -> new Shuffle());
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	/** Client → server: the loot table browser asks for every assignment under the current seed. */
+	public record RequestTables() implements CustomPacketPayload {
+		public static final Type<RequestTables> TYPE = payloadType("request_tables");
+		public static final StreamCodec<RegistryFriendlyByteBuf, RequestTables> CODEC = StreamCodec.of((buf, p) -> {
+		}, buf -> new RequestTables());
+
+		@Override
+		public Type<? extends CustomPacketPayload> type() {
+			return TYPE;
+		}
+	}
+
+	/**
+	 * One loot table and what it currently turns into.
+	 *
+	 * @param table    loot table ID
+	 * @param item     assigned item ID, or "" if the pool is empty
+	 * @param category {@link com.iceyatom.surprisedrops.DropCategory} ordinal
+	 */
+	public record TableEntry(String table, String item, int category) {
+	}
+
+	/** Server → client: the answer to {@link RequestTables}, sorted by loot table ID. */
+	public record TableList(long seed, java.util.List<TableEntry> entries) implements CustomPacketPayload {
+		public static final Type<TableList> TYPE = payloadType("table_list");
+		public static final StreamCodec<RegistryFriendlyByteBuf, TableList> CODEC = StreamCodec.of(
+				(buf, p) -> {
+					buf.writeLong(p.seed);
+					buf.writeVarInt(p.entries.size());
+					for (TableEntry e : p.entries) {
+						buf.writeUtf(e.table());
+						buf.writeUtf(e.item());
+						buf.writeByte(e.category());
+					}
+				},
+				buf -> {
+					long seed = buf.readLong();
+					int size = buf.readVarInt();
+					java.util.List<TableEntry> entries = new java.util.ArrayList<>(size);
+					for (int i = 0; i < size; i++) {
+						entries.add(new TableEntry(buf.readUtf(), buf.readUtf(), buf.readByte()));
+					}
+					return new TableList(seed, entries);
+				}
+		);
 
 		@Override
 		public Type<? extends CustomPacketPayload> type() {

@@ -5,6 +5,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.Holder;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.resources.ResourceKey;
@@ -16,6 +17,7 @@ import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.level.storage.loot.LootContext;
 import net.minecraft.world.level.storage.loot.LootTable;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -31,9 +33,20 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class LootReplacer {
 	private static final int MAX_CONSECUTIVE_FAILURES = 3;
 
-	/** Sorted item IDs (FR-17) and the matching Item objects. Rebuilt on start and datapack reload only (NFR-01). */
-	private static volatile List<String> pool;
+	/**
+	 * Sorted item IDs (FR-17): every allowed item, and the survival-obtainable subset. Each world
+	 * picks one with its survival-items-only setting. Rebuilt on start and datapack reload only (NFR-01).
+	 */
+	private static volatile List<String> fullPool;
+	private static volatile List<String> survivalPool;
 	private static volatile Map<String, Item> poolItems = Map.of();
+	/** Every loot table Surprise Drops can change (any category), sorted. Rebuilt with the pools. */
+	private static volatile List<String> tableIds = List.of();
+	/** Table-to-item assignments for the last seed and pool used; recomputed when either changes. */
+	private static volatile Assignments assignments;
+
+	private record Assignments(long seed, List<String> pool, List<String> tables, Map<String, Item> items) {
+	}
 
 	private static final AtomicInteger consecutiveFailures = new AtomicInteger();
 	private static volatile boolean sessionDisabled;
@@ -41,31 +54,52 @@ public final class LootReplacer {
 	private LootReplacer() {
 	}
 
-	/** Rebuilds the replacement pool from the item registry and the exclusion list (FR-17, NFR-10). */
-	public static synchronized void rebuildPool() {
+	/**
+	 * Rebuilds both replacement pools from the item registry and the exclusion list (FR-17, NFR-10),
+	 * and the list of loot tables from the server's loaded data packs.
+	 */
+	public static synchronized void rebuildPool(MinecraftServer server) {
+		if (server != null) {
+			List<String> tables = new ArrayList<>();
+			server.reloadableRegistries().lookup().lookupOrThrow(Registries.LOOT_TABLE).listElements().forEach(holder -> {
+				if (DropCategory.of(holder.value().getParamSet()) != null) {
+					tables.add(holder.key().identifier().toString());
+				}
+			});
+			tables.sort(null);
+			tableIds = List.copyOf(tables);
+		}
+		rebuildItemPools();
+	}
+
+	private static synchronized void rebuildItemPools() {
 		SurpriseDropsConfig config = SurpriseDropsConfig.get();
 		Map<String, Item> items = new HashMap<>();
 		for (Item item : BuiltInRegistries.ITEM) {
 			items.put(BuiltInRegistries.ITEM.getKey(item).toString(), item);
 		}
-		List<String> built = SurpriseDropsHelper.buildPool(items.keySet(), new HashSet<>(config.excludedItems), config.survivalItemsOnly);
-		Map<String, Item> map = new HashMap<>(built.size() * 2);
-		for (String id : built) {
+		HashSet<String> excluded = new HashSet<>(config.excludedItems);
+		List<String> full = SurpriseDropsHelper.buildPool(items.keySet(), excluded, false);
+		List<String> survival = SurpriseDropsHelper.buildPool(items.keySet(), excluded, true);
+		Map<String, Item> map = new HashMap<>(full.size() * 2);
+		for (String id : full) {
 			map.put(id, items.get(id));
 		}
 		poolItems = map;
-		pool = built;
+		fullPool = full;
+		survivalPool = survival;
+		assignments = null;
 		SpecialItems.clearCache();
-		SurpriseDrops.LOGGER.info("Surprise Drops replacement pool built: {} items", built.size());
+		SurpriseDrops.LOGGER.info("Surprise Drops replacement pool built: {} survival items, {} items in total, {} loot tables",
+				survival.size(), full.size(), tableIds.size());
 	}
 
-	public static List<String> pool() {
-		List<String> p = pool;
-		if (p == null) {
-			rebuildPool();
-			p = pool;
+	/** The pool a world with this setting draws from. */
+	public static List<String> pool(boolean survivalItemsOnly) {
+		if (fullPool == null) {
+			rebuildItemPools();
 		}
-		return p;
+		return survivalItemsOnly ? survivalPool : fullPool;
 	}
 
 	/** Called at server start: a new session clears the failure state (NFR-04). */
@@ -78,10 +112,37 @@ public final class LootReplacer {
 		return sessionDisabled;
 	}
 
-	/** The item assigned to a loot table under the given seed (FR-15), or {@code null} if the pool is empty. */
-	public static Item assignedItem(long seed, Identifier lootTableId) {
-		String id = SurpriseDropsHelper.assignedItem(seed, lootTableId.toString(), pool());
+	/** The item assigned to a loot table under these settings (FR-15), or {@code null} if the pool is empty. */
+	public static Item assignedItem(DropSettings settings, Identifier lootTableId) {
+		List<String> pool = pool(settings.survivalItemsOnly());
+		Item item = assignments(settings.seed(), pool).items().get(lootTableId.toString());
+		if (item != null) {
+			return item;
+		}
+		// A table missing from the list (none expected): fall back to a single hashed pick.
+		String id = SurpriseDropsHelper.assignedItem(settings.seed(), lootTableId.toString(), pool);
 		return id == null ? null : poolItems.get(id);
+	}
+
+	/** Each table gets its own item (see {@link SurpriseDropsHelper#assignAll}); cached per seed and pool. */
+	private static Assignments assignments(long seed, List<String> pool) {
+		Assignments current = assignments;
+		List<String> tables = tableIds;
+		if (current != null && current.seed() == seed && current.pool() == pool && current.tables() == tables) {
+			return current;
+		}
+		synchronized (LootReplacer.class) {
+			current = assignments;
+			if (current != null && current.seed() == seed && current.pool() == pool && current.tables() == tables) {
+				return current;
+			}
+			Map<String, Item> items = new HashMap<>(tables.size() * 2);
+			Map<String, Item> lookup = poolItems;
+			SurpriseDropsHelper.assignAll(seed, tables, pool).forEach((table, item) -> items.put(table, lookup.get(item)));
+			current = new Assignments(seed, pool, tables, Map.copyOf(items));
+			assignments = current;
+			return current;
+		}
 	}
 
 	/** The {@code MODIFY_DROPS} listener. */
@@ -124,7 +185,7 @@ public final class LootReplacer {
 		if (carriesContents(drops)) {
 			return;
 		}
-		Item item = assignedItem(settings.seed(), tableId);
+		Item item = assignedItem(settings, tableId);
 		if (item == null) {
 			return;
 		}

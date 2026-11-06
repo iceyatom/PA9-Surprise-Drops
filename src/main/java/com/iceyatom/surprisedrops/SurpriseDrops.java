@@ -32,6 +32,9 @@ public class SurpriseDrops implements ModInitializer {
 		PayloadTypeRegistry.serverboundPlay().register(SurpriseDropsPayloads.ApplySettings.TYPE, SurpriseDropsPayloads.ApplySettings.CODEC);
 		PayloadTypeRegistry.serverboundPlay().register(SurpriseDropsPayloads.Shuffle.TYPE, SurpriseDropsPayloads.Shuffle.CODEC);
 		PayloadTypeRegistry.clientboundPlay().register(SurpriseDropsPayloads.Sync.TYPE, SurpriseDropsPayloads.Sync.CODEC);
+		PayloadTypeRegistry.serverboundPlay().register(SurpriseDropsPayloads.RequestTables.TYPE, SurpriseDropsPayloads.RequestTables.CODEC);
+		PayloadTypeRegistry.clientboundPlay().register(SurpriseDropsPayloads.TableList.TYPE, SurpriseDropsPayloads.TableList.CODEC);
+		ServerPlayNetworking.registerGlobalReceiver(SurpriseDropsPayloads.RequestTables.TYPE, SurpriseDropsServer::onRequestTables);
 		ServerPlayNetworking.registerGlobalReceiver(SurpriseDropsPayloads.ApplySettings.TYPE, SurpriseDropsServer::onApplySettings);
 		ServerPlayNetworking.registerGlobalReceiver(SurpriseDropsPayloads.Shuffle.TYPE, SurpriseDropsServer::onShuffle);
 
@@ -42,9 +45,9 @@ public class SurpriseDrops implements ModInitializer {
 			currentServer = server;
 			currentState = WorldState.get(server);
 			LootReplacer.resetSession();
-			LootReplacer.rebuildPool();
+			LootReplacer.rebuildPool(server);
 		});
-		ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> LootReplacer.rebuildPool());
+		ServerLifecycleEvents.END_DATA_PACK_RELOAD.register((server, resourceManager, success) -> LootReplacer.rebuildPool(server));
 		ServerLifecycleEvents.SERVER_STOPPED.register(server -> {
 			currentServer = null;
 			currentState = null;

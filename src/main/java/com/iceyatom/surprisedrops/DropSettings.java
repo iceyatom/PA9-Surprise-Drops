@@ -5,7 +5,8 @@ import com.mojang.serialization.codecs.RecordCodecBuilder;
 import net.minecraft.network.FriendlyByteBuf;
 
 /**
- * The per-world settings (FR-33): master flag, seed, multiplier range and category toggles.
+ * The per-world settings (FR-33): master flag, seed, multiplier range, category toggles and
+ * whether only survival-obtainable items can be chosen.
  * Immutable; every change produces a new instance.
  */
 public record DropSettings(
@@ -16,7 +17,8 @@ public record DropSettings(
 		boolean affectBlocks,
 		boolean affectMobs,
 		boolean affectContainers,
-		boolean affectOther
+		boolean affectOther,
+		boolean survivalItemsOnly
 ) {
 	public static final Codec<DropSettings> CODEC = RecordCodecBuilder.create(i -> i.group(
 			Codec.BOOL.fieldOf("enabled").forGetter(DropSettings::enabled),
@@ -26,13 +28,15 @@ public record DropSettings(
 			Codec.BOOL.fieldOf("affect_blocks").forGetter(DropSettings::affectBlocks),
 			Codec.BOOL.fieldOf("affect_mobs").forGetter(DropSettings::affectMobs),
 			Codec.BOOL.fieldOf("affect_containers").forGetter(DropSettings::affectContainers),
-			Codec.BOOL.fieldOf("affect_other").forGetter(DropSettings::affectOther)
+			Codec.BOOL.fieldOf("affect_other").forGetter(DropSettings::affectOther),
+			// Worlds saved before this setting existed used survival-only items.
+			Codec.BOOL.optionalFieldOf("survival_items_only", true).forGetter(DropSettings::survivalItemsOnly)
 	).apply(i, DropSettings::new));
 
 	/** Settings for a brand-new world: TOML defaults plus a fresh random seed (FR-32, FR-33). */
 	public static DropSettings fromDefaults(SurpriseDropsConfig config, long seed) {
 		return new DropSettings(config.enabledDefault, seed, config.multiplierMin, config.multiplierMax,
-				config.affectBlocks, config.affectMobs, config.affectContainers, config.affectOther);
+				config.affectBlocks, config.affectMobs, config.affectContainers, config.affectOther, config.survivalItemsOnly);
 	}
 
 	public boolean affects(DropCategory category) {
@@ -45,15 +49,20 @@ public record DropSettings(
 	}
 
 	public DropSettings withEnabled(boolean value) {
-		return new DropSettings(value, seed, multiplierMin, multiplierMax, affectBlocks, affectMobs, affectContainers, affectOther);
+		return new DropSettings(value, seed, multiplierMin, multiplierMax, affectBlocks, affectMobs, affectContainers, affectOther, survivalItemsOnly);
 	}
 
 	public DropSettings withSeed(long value) {
-		return new DropSettings(enabled, value, multiplierMin, multiplierMax, affectBlocks, affectMobs, affectContainers, affectOther);
+		return new DropSettings(enabled, value, multiplierMin, multiplierMax, affectBlocks, affectMobs, affectContainers, affectOther, survivalItemsOnly);
+	}
+
+	/** Changing the item pool always comes with a new seed (see {@link SurpriseDropsServer#apply}). */
+	public DropSettings withSurvivalItemsOnly(boolean value, long newSeed) {
+		return new DropSettings(enabled, newSeed, multiplierMin, multiplierMax, affectBlocks, affectMobs, affectContainers, affectOther, value);
 	}
 
 	public DropSettings withRange(int min, int max) {
-		return new DropSettings(enabled, seed, min, max, affectBlocks, affectMobs, affectContainers, affectOther);
+		return new DropSettings(enabled, seed, min, max, affectBlocks, affectMobs, affectContainers, affectOther, survivalItemsOnly);
 	}
 
 	public void write(FriendlyByteBuf buf) {
@@ -65,10 +74,11 @@ public record DropSettings(
 		buf.writeBoolean(affectMobs);
 		buf.writeBoolean(affectContainers);
 		buf.writeBoolean(affectOther);
+		buf.writeBoolean(survivalItemsOnly);
 	}
 
 	public static DropSettings read(FriendlyByteBuf buf) {
 		return new DropSettings(buf.readBoolean(), buf.readLong(), buf.readVarInt(), buf.readVarInt(),
-				buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean());
+				buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean(), buf.readBoolean());
 	}
 }

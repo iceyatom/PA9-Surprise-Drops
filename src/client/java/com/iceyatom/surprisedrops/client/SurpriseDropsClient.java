@@ -55,6 +55,13 @@ public class SurpriseDropsClient implements ClientModInitializer {
 			ClientState.update(payload.settings(), payload.canEdit());
 			if (context.client().gui.screen() instanceof SurpriseDropsConfigScreen screen) {
 				screen.onServerSync(payload.settings());
+			} else if (context.client().gui.screen() instanceof LootTableScreen screen) {
+				screen.requestTables(); // seed or pool may have changed
+			}
+		});
+		ClientPlayNetworking.registerGlobalReceiver(SurpriseDropsPayloads.TableList.TYPE, (payload, context) -> {
+			if (context.client().gui.screen() instanceof LootTableScreen screen) {
+				screen.setData(payload);
 			}
 		});
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> ClientState.clear());

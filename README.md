@@ -51,7 +51,9 @@ replaced drops normally.
 - **Survival items only** — by default only items a survival player can obtain are chosen. Spawn
   eggs, bedrock, spawners, trial spawners, vaults, infested blocks, petrified oak slab, player
   heads, farmland, dirt path, test blocks and other creative/command-only items never drop. Turn
-  this off with `survival_items_only = false`.
+  this off per world with the **Survival items only** button in the config screen or
+  `/surprisedrops survivalitems false`. Changing it always reshuffles the seed (after a
+  confirmation in the screen), because the set of possible items is different.
 - **Items that need data** — maps, potions and similar items are created the way vanilla makes
   them, so they work:
   - an explorer map (village, treasure, mansion, trial chambers and so on) points to the nearest
@@ -78,21 +80,33 @@ replaced drops normally.
     appears that very large multipliers can create many item entities and hurt performance; you can
     still save;
   - one toggle per **category**;
+  - the **Survival items only** toggle. Changing it shows a warning, locks the seed field, and asks
+    for confirmation on **Done** because a new random seed is picked;
   - the **world seed** field (see below) and the **Shuffle** button;
-  - **Done** (applies and saves immediately) and **Cancel**.
+  - **Loot Tables**, **Done** (applies and saves immediately) and **Cancel**.
+
+  **Loot Tables** opens a scrollable list of every loot table Surprise Drops can change and the
+  item it currently drops under this world's seed, with the item's icon (hover for its tooltip) and
+  its category. A category that is OFF is marked in orange. Type in the search box to filter by
+  loot table (`stone`, `zombie`), item name or ID (`diamond`) or category (`mobs`). Any player can
+  view the list; it refreshes on its own after a Shuffle or settings change. It shows the
+  *assigned* item: an explorer map with no structure in range still drops as an Empty Map.
 
   Only operators (permission level 2) or the single-player host can change settings. Everyone else
   sees the screen read-only.
-- **Seeds and Shuffle** — assignments are not stored one by one. Each table's item is worked out
-  from the world's Surprise Drops seed and the loot table ID, so the same seed always gives the
-  same assignments, across restarts and between players. Type a number or any text into the seed
+- **Seeds and Shuffle** — the seed shuffles the whole item pool, and the loot tables (in
+  alphabetical order) take items from it one after another, so **every loot table drops a
+  different item** and as many items as possible appear. There are about 1,450 loot tables and
+  about 1,530 survival items, so roughly 80–90 items are left out of any one world; which ones
+  depends on the seed. Assignments are not stored one by one: the same seed always gives the same
+  assignments, across restarts and between players. Type a number or any text into the seed
   field (text is turned into a number, like vanilla world seeds) to reproduce a known set of
   assignments; leave it blank to keep the current seed.
   **Shuffle** asks for confirmation, then picks a new random seed and shows it in chat (click it to
   copy). It only affects future drops: items already dropped and chests already generated don't
   change, and the multiplier range and toggles stay as they are.
-  Adding or removing mods or datapacks that add items can change assignments, because the pool of
-  possible items changes.
+  Adding or removing mods or datapacks that add items or loot tables can change assignments,
+  because the shuffle runs over a different list.
 - **What is never changed** — only loot-table output is replaced. Player death drops, items you
   drop or throw, the contents of a broken chest, and experience orbs are never touched. Mob
   equipment and villager trades always stay vanilla. A drop that holds stored items, such as a
@@ -105,6 +119,8 @@ replaced drops normally.
   - `/surprisedrops enable` / `disable`
   - `/surprisedrops shuffle [seed]` — new random seed, or set a specific number/text seed
   - `/surprisedrops multiplier <min> <max>`
+  - `/surprisedrops survivalitems <true|false>` — turn Survival items only on or off; picks a new
+    random seed
   - `/surprisedrops reload` — re-reads the config file without a restart
   - `/surprisedrops lookup <loot table>` — shows the assigned item, category and current range,
     e.g. `/surprisedrops lookup minecraft:blocks/stone`
@@ -116,7 +132,8 @@ Works in survival, creative and adventure, in every difficulty, in single-player
 
 ## Settings and the config file
 
-Each world saves its own settings (on/off, seed, multiplier range and category toggles), so every
+Each world saves its own settings (on/off, seed, multiplier range, category toggles and survival
+items only), so every
 world keeps its own assignments. The first time the mod loads in a world it picks a random seed.
 
 `config/surprisedrops.toml` holds the **defaults for new worlds** plus options with no button in
@@ -133,7 +150,7 @@ the screen. Edit it and run `/surprisedrops reload` to apply changes.
 | `affect_other` | `true` | Randomize fishing, archaeology, gifts, bartering and other loot. |
 | `max_unstackable_count` | `64` | Cap on the count for items that can't stack (1–1000). |
 | `excluded_items` | technical items | Item IDs that can never be chosen: command blocks, structure blocks, jigsaw, barrier, light, structure void, debug stick, knowledge book. |
-| `survival_items_only` | `true` | Only choose items a survival player can obtain (no spawn eggs, bedrock, spawners, infested blocks, test blocks, etc.). |
+| `survival_items_only` | `true` | Default for new worlds: only choose items a survival player can obtain (no spawn eggs, bedrock, spawners, infested blocks, test blocks, etc.). |
 | `open_config_keybind` | `"unbound"` | Default key for the config screen, e.g. `"key.keyboard.o"`. Also rebindable in Controls. |
 | `debug_logging` | `false` | Write each replacement (table, item, multiplier, stack count) to the log. Development use only. |
 

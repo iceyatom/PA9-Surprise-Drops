@@ -36,10 +36,18 @@ public final class SurpriseDropsServer {
 		actionBar(actor, enabled);
 	}
 
-	/** Applies new settings from the screen (FR-12). Values must already be validated. */
+	/**
+	 * Applies new settings from the screen (FR-12). Values must already be validated.
+	 * If survival-items-only changed, the seed is always replaced with a new random one: the item
+	 * pool is different, so the old seed's assignments no longer mean anything.
+	 */
 	public static void apply(MinecraftServer server, ServerPlayer actor, DropSettings settings) {
 		WorldState state = WorldState.get(server);
 		DropSettings old = state.settings();
+		boolean poolChanged = old.survivalItemsOnly() != settings.survivalItemsOnly();
+		if (poolChanged) {
+			settings = settings.withSurvivalItemsOnly(settings.survivalItemsOnly(), ThreadLocalRandom.current().nextLong());
+		}
 		state.setSettings(settings);
 		SurpriseDrops.onSettingsChanged(server);
 		if (actor != null) {
@@ -48,10 +56,28 @@ public final class SurpriseDropsServer {
 			} else {
 				actor.sendSystemMessage(Component.translatable("surprisedrops.message.saved"), true);
 			}
-			if (old.seed() != settings.seed()) {
+			if (poolChanged) {
+				actor.sendSystemMessage(survivalMessage(settings.survivalItemsOnly(), settings.seed()));
+			} else if (old.seed() != settings.seed()) {
 				actor.sendSystemMessage(seedMessage("surprisedrops.message.seed_set", settings.seed()));
 			}
 		}
+	}
+
+	/** Turns survival-items-only on or off and reshuffles to a new random seed. Returns the new seed. */
+	public static long setSurvivalItemsOnly(MinecraftServer server, boolean value) {
+		long newSeed = ThreadLocalRandom.current().nextLong();
+		WorldState state = WorldState.get(server);
+		state.setSettings(state.settings().withSurvivalItemsOnly(value, newSeed));
+		SurpriseDrops.onSettingsChanged(server);
+		return newSeed;
+	}
+
+	/** "Survival items only: ON. Seed reshuffled: 123" with the seed clickable to copy. */
+	public static Component survivalMessage(boolean value, long seed) {
+		return Component.translatable("surprisedrops.message.survival_changed",
+				Component.translatable(value ? "options.on" : "options.off"),
+				seedMessage("surprisedrops.message.new_seed", seed));
 	}
 
 	/**
@@ -130,8 +156,38 @@ public final class SurpriseDropsServer {
 		DropSettings current = WorldState.get(server).settings();
 		Long parsedSeed = SurpriseDropsHelper.parseSeed(payload.seedText());
 		long seed = parsedSeed != null ? parsedSeed : current.seed();
+		// If survival-items-only changed, apply() replaces this seed with a new random one.
 		apply(server, player, new DropSettings(payload.enabled(), seed, payload.multiplierMin(), payload.multiplierMax(),
-				payload.affectBlocks(), payload.affectMobs(), payload.affectContainers(), payload.affectOther()));
+				payload.affectBlocks(), payload.affectMobs(), payload.affectContainers(), payload.affectOther(),
+				payload.survivalItemsOnly()));
+	}
+
+	/**
+	 * Loot table browser: send every loot table that Surprise Drops can change, with its assigned
+	 * item under the current seed. Read-only, so any player with the mod may ask. Tables that are
+	 * always vanilla (mob equipment, villager trades) are left out.
+	 */
+	public static void onRequestTables(SurpriseDropsPayloads.RequestTables payload, ServerPlayNetworking.Context context) {
+		ServerPlayer player = context.player();
+		MinecraftServer server = context.server();
+		DropSettings settings = WorldState.get(server).settings();
+		java.util.List<SurpriseDropsPayloads.TableEntry> entries = new java.util.ArrayList<>();
+		server.reloadableRegistries().lookup().lookupOrThrow(net.minecraft.core.registries.Registries.LOOT_TABLE)
+				.listElements()
+				.forEach(holder -> {
+					DropCategory category = DropCategory.of(holder.value().getParamSet());
+					if (category == null) {
+						return;
+					}
+					net.minecraft.resources.Identifier id = holder.key().identifier();
+					net.minecraft.world.item.Item item = LootReplacer.assignedItem(settings, id);
+					String itemId = item == null ? "" : net.minecraft.core.registries.BuiltInRegistries.ITEM.getKey(item).toString();
+					entries.add(new SurpriseDropsPayloads.TableEntry(id.toString(), itemId, category.ordinal()));
+				});
+		entries.sort(java.util.Comparator.comparing(SurpriseDropsPayloads.TableEntry::table));
+		if (ServerPlayNetworking.canSend(player, SurpriseDropsPayloads.TableList.TYPE)) {
+			ServerPlayNetworking.send(player, new SurpriseDropsPayloads.TableList(settings.seed(), entries));
+		}
 	}
 
 	/** PKT-03 */

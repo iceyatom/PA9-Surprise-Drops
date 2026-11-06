@@ -5,8 +5,12 @@ import net.minecraft.util.RandomSource;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * Assignment, multiplier and stack-splitting logic (NFR-13).
@@ -105,8 +109,9 @@ public final class SurpriseDropsHelper {
 	}
 
 	/**
-	 * Picks the replacement item for one loot table (FR-15): hash (seed, loot table ID) to an
-	 * integer and take pool[hash mod pool size]. Same inputs always give the same item (FR-16).
+	 * Fallback pick for a single loot table that is not in the {@link #assignAll} list (for example
+	 * one added after the list was built): hash (seed, loot table ID) to an integer and take
+	 * pool[hash mod pool size]. Same inputs always give the same item (FR-16).
 	 *
 	 * @return the chosen item ID, or {@code null} if the pool is empty
 	 */
@@ -116,6 +121,41 @@ public final class SurpriseDropsHelper {
 		}
 		long hash = hash(seed, lootTableId);
 		return pool.get((int) Math.floorMod(hash, (long) pool.size()));
+	}
+
+	/**
+	 * Assigns every loot table its own item: the pool is shuffled with the seed and the tables, in
+	 * sorted order, take items one after another. While there are at least as many items as tables,
+	 * no two tables share an item. If there are more tables than items, the shuffled pool is reused
+	 * in order so items repeat as evenly as possible.
+	 *
+	 * @param tableIds every loot table to assign (any order; it is sorted here)
+	 * @return loot table ID to item ID; empty if the pool is empty
+	 */
+	public static Map<String, String> assignAll(long seed, Collection<String> tableIds, List<String> pool) {
+		Map<String, String> result = new HashMap<>(tableIds.size() * 2);
+		if (pool.isEmpty()) {
+			return result;
+		}
+		List<String> tables = new ArrayList<>(new TreeSet<>(tableIds));
+		List<String> items = shuffled(seed, pool);
+		for (int i = 0; i < tables.size(); i++) {
+			result.put(tables.get(i), items.get(i % items.size()));
+		}
+		return result;
+	}
+
+	/** Fisher-Yates shuffle driven by SplitMix64, so the order is the same on every Java version. */
+	static List<String> shuffled(long seed, List<String> pool) {
+		List<String> items = new ArrayList<>(pool);
+		long state = mix64(seed ^ 0x5D0B5EEDL);
+		for (int i = items.size() - 1; i > 0; i--) {
+			state += 0x9e3779b97f4a7c15L;
+			long r = mix64(state);
+			int j = (int) Math.floorMod(r, (long) (i + 1));
+			Collections.swap(items, i, j);
+		}
+		return items;
 	}
 
 	/** Deterministic 64-bit hash of (seed, loot table ID). FNV-1a over the ID, then a SplitMix64 finish. */

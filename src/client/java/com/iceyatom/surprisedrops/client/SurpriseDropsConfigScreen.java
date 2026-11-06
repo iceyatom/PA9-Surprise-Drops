@@ -9,6 +9,7 @@ import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.CycleButton;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.ConfirmScreen;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -32,6 +33,9 @@ public class SurpriseDropsConfigScreen extends Screen {
 	private boolean affectMobs;
 	private boolean affectContainers;
 	private boolean affectOther;
+	private boolean survivalItemsOnly;
+	/** The live value; changing away from it reshuffles the seed. */
+	private final boolean liveSurvivalItemsOnly;
 	private String minText;
 	private String maxText;
 	private String seedText;
@@ -60,6 +64,8 @@ public class SurpriseDropsConfigScreen extends Screen {
 		affectMobs = live.affectMobs();
 		affectContainers = live.affectContainers();
 		affectOther = live.affectOther();
+		survivalItemsOnly = live.survivalItemsOnly();
+		liveSurvivalItemsOnly = live.survivalItemsOnly();
 		minText = Integer.toString(live.multiplierMin());
 		maxText = Integer.toString(live.multiplierMax());
 	}
@@ -78,11 +84,11 @@ public class SurpriseDropsConfigScreen extends Screen {
 		int right = cx + 5;
 
 		CycleButton<Boolean> master = addRenderableWidget(CycleButton.onOffBuilder(enabled)
-				.create(left, 32, 310, 20, Component.translatable("surprisedrops.screen.master"), (b, v) -> enabled = v));
+				.create(left, 24, 310, 20, Component.translatable("surprisedrops.screen.master"), (b, v) -> enabled = v));
 		master.active = editable;
 
-		minBox = addRenderableWidget(new EditBox(font, left, 72, 150, 20, Component.translatable("surprisedrops.screen.min")));
-		maxBox = addRenderableWidget(new EditBox(font, right, 72, 150, 20, Component.translatable("surprisedrops.screen.max")));
+		minBox = addRenderableWidget(new EditBox(font, left, 60, 150, 20, Component.translatable("surprisedrops.screen.min")));
+		maxBox = addRenderableWidget(new EditBox(font, right, 60, 150, 20, Component.translatable("surprisedrops.screen.max")));
 		for (EditBox box : new EditBox[]{minBox, maxBox}) {
 			box.setMaxLength(6);
 			box.setEditable(editable);
@@ -98,33 +104,57 @@ public class SurpriseDropsConfigScreen extends Screen {
 			validate();
 		});
 
-		addCategory(left, 112, "surprisedrops.screen.blocks", affectBlocks, v -> affectBlocks = v, editable);
-		addCategory(right, 112, "surprisedrops.screen.mobs", affectMobs, v -> affectMobs = v, editable);
-		addCategory(left, 136, "surprisedrops.screen.containers", affectContainers, v -> affectContainers = v, editable);
-		addCategory(right, 136, "surprisedrops.screen.other", affectOther, v -> affectOther = v, editable);
+		addCategory(left, 97, "surprisedrops.screen.blocks", affectBlocks, v -> affectBlocks = v, editable);
+		addCategory(right, 97, "surprisedrops.screen.mobs", affectMobs, v -> affectMobs = v, editable);
+		addCategory(left, 120, "surprisedrops.screen.containers", affectContainers, v -> affectContainers = v, editable);
+		addCategory(right, 120, "surprisedrops.screen.other", affectOther, v -> affectOther = v, editable);
 
-		seedBox = addRenderableWidget(new EditBox(font, left, 176, 230, 20, Component.translatable("surprisedrops.screen.seed")));
+		CycleButton<Boolean> survival = addRenderableWidget(CycleButton.onOffBuilder(survivalItemsOnly)
+				.create(left, 143, 310, 20, Component.translatable("surprisedrops.screen.survival"), (b, v) -> {
+					survivalItemsOnly = v;
+					updateSeedBox();
+				}));
+		survival.setTooltip(Tooltip.create(Component.translatable("surprisedrops.screen.survival_tooltip")));
+		survival.active = editable;
+
+		seedBox = addRenderableWidget(new EditBox(font, left, 180, 230, 20, Component.translatable("surprisedrops.screen.seed")));
 		seedBox.setMaxLength(256);
 		seedBox.setValue(seedText);
-		seedBox.setEditable(editable);
 		seedBox.setHint(Component.translatable("surprisedrops.screen.seed_hint"));
 		seedBox.setResponder(s -> seedText = s);
 
 		Button shuffle = addRenderableWidget(Button.builder(Component.translatable("surprisedrops.screen.shuffle"), b -> confirmShuffle())
-				.bounds(left + 235, 176, 75, 20).build());
+				.bounds(left + 235, 180, 75, 20).build());
 		shuffle.active = editable;
+		updateSeedBox();
 
+		Button tables = addRenderableWidget(Button.builder(Component.translatable("surprisedrops.screen.tables"),
+						b -> minecraft.gui.setScreen(new LootTableScreen(this)))
+				.bounds(left, height - 28, 100, 20).build());
+		tables.active = LootTableScreen.canRequest();
 		doneButton = addRenderableWidget(Button.builder(Component.translatable("gui.done"), b -> done())
-				.bounds(left, height - 28, 150, 20).build());
+				.bounds(left + 105, height - 28, 100, 20).build());
 		addRenderableWidget(Button.builder(Component.translatable("gui.cancel"), b -> onClose())
-				.bounds(right, height - 28, 150, 20).build());
+				.bounds(left + 210, height - 28, 100, 20).build());
 
 		validate();
+	}
+
+	private boolean survivalChanged() {
+		return survivalItemsOnly != liveSurvivalItemsOnly;
+	}
+
+	/** While a survival-items-only change is pending the seed will be reshuffled, so the seed field is locked. */
+	private void updateSeedBox() {
+		if (seedBox != null) {
+			seedBox.setEditable(editable() && !survivalChanged());
+		}
 	}
 
 	private void addCategory(int x, int y, String key, boolean value, java.util.function.Consumer<Boolean> setter, boolean editable) {
 		CycleButton<Boolean> button = addRenderableWidget(CycleButton.onOffBuilder(value)
 				.create(x, y, 150, 20, Component.translatable(key), (b, v) -> setter.accept(v)));
+		button.setTooltip(Tooltip.create(Component.translatable(key + "_tooltip")));
 		button.active = editable;
 	}
 
@@ -166,18 +196,38 @@ public class SurpriseDropsConfigScreen extends Screen {
 				Component.translatable("surprisedrops.screen.shuffle_confirm_body")));
 	}
 
-	/** FR-12 / PKT-01 */
+	/** FR-12 / PKT-01. A survival-items-only change reshuffles the seed, so it asks first. */
 	private void done() {
-		if (editable()) {
-			Integer min = SurpriseDropsHelper.parseWholeNumber(minText);
-			Integer max = SurpriseDropsHelper.parseWholeNumber(maxText);
-			if (min == null || max == null || !SurpriseDropsHelper.isValidRange(min, max)) {
-				return;
-			}
-			ClientPlayNetworking.send(new SurpriseDropsPayloads.ApplySettings(enabled, min, max,
-					affectBlocks, affectMobs, affectContainers, affectOther, seedText.trim()));
+		if (!editable()) {
+			onClose();
+			return;
 		}
-		onClose();
+		Integer min = SurpriseDropsHelper.parseWholeNumber(minText);
+		Integer max = SurpriseDropsHelper.parseWholeNumber(maxText);
+		if (min == null || max == null || !SurpriseDropsHelper.isValidRange(min, max)) {
+			return;
+		}
+		if (!survivalChanged()) {
+			send(min, max);
+			onClose();
+			return;
+		}
+		minecraft.gui.setScreen(new ConfirmScreen(confirmed -> {
+			if (confirmed && editable()) {
+				send(min, max);
+				onClose();
+			} else {
+				minecraft.gui.setScreen(this);
+			}
+		}, Component.translatable("surprisedrops.screen.survival_confirm_title"),
+				Component.translatable("surprisedrops.screen.survival_confirm_body")));
+	}
+
+	private void send(int min, int max) {
+		// The server picks the new seed when survival-items-only changes, so no seed text is sent then.
+		String seed = survivalChanged() ? "" : seedText.trim();
+		ClientPlayNetworking.send(new SurpriseDropsPayloads.ApplySettings(enabled, min, max,
+				affectBlocks, affectMobs, affectContainers, affectOther, survivalItemsOnly, seed));
 	}
 
 	/** Called when the server pushes new settings while this screen is open (e.g. after Shuffle). */
@@ -198,19 +248,21 @@ public class SurpriseDropsConfigScreen extends Screen {
 		super.extractRenderState(graphics, mouseX, mouseY, partialTick);
 		int cx = width / 2;
 		int left = cx - 155;
-		graphics.centeredText(font, title, cx, 14, COLOR_TEXT);
-		graphics.text(font, Component.translatable("surprisedrops.screen.min"), left, 61, COLOR_LABEL);
-		graphics.text(font, Component.translatable("surprisedrops.screen.max"), cx + 5, 61, COLOR_LABEL);
-		graphics.text(font, Component.translatable("surprisedrops.screen.categories"), left, 101, COLOR_LABEL);
-		graphics.text(font, Component.translatable("surprisedrops.screen.seed"), left, 165, COLOR_LABEL);
+		graphics.centeredText(font, title, cx, 10, COLOR_TEXT);
+		graphics.text(font, Component.translatable("surprisedrops.screen.min"), left, 50, COLOR_LABEL);
+		graphics.text(font, Component.translatable("surprisedrops.screen.max"), cx + 5, 50, COLOR_LABEL);
+		graphics.text(font, Component.translatable("surprisedrops.screen.categories"), left, 86, COLOR_LABEL);
+		graphics.text(font, Component.translatable("surprisedrops.screen.seed"), left, 170, COLOR_LABEL);
 		if (validationMessage != null) {
-			graphics.centeredText(font, validationMessage, cx, 204, validationColor);
+			graphics.centeredText(font, validationMessage, cx, 206, validationColor);
 		}
 		if (!editable()) {
 			Component notice = ClientState.settings() == null
 					? Component.translatable("surprisedrops.screen.no_server")
 					: Component.translatable("surprisedrops.screen.read_only");
 			graphics.centeredText(font, notice, cx, 218, COLOR_WARNING);
+		} else if (survivalChanged()) {
+			graphics.centeredText(font, Component.translatable("surprisedrops.screen.survival_pending"), cx, 218, COLOR_WARNING);
 		}
 	}
 }

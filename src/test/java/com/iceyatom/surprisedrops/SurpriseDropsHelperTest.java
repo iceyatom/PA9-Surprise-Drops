@@ -38,6 +38,31 @@ class SurpriseDropsHelperTest {
 	}
 
 	@Test
+	void assignAllGivesEveryTableItsOwnItem() {
+		List<String> pool = SurpriseDropsHelper.buildPool(
+				IntStream.range(0, 1500).mapToObj(i -> "mod:item_" + i).toList(), Set.of());
+		List<String> tables = IntStream.range(0, 1400).mapToObj(i -> "minecraft:blocks/b" + i).toList();
+		java.util.Map<String, String> a = SurpriseDropsHelper.assignAll(9L, tables, pool);
+		assertEquals(1400, a.size());
+		assertEquals(1400, a.values().stream().distinct().count(), "no two tables share an item");
+		// Same seed, same result, whatever order the tables come in.
+		assertEquals(a, SurpriseDropsHelper.assignAll(9L, tables.reversed(), pool));
+		// A different seed gives a different assignment.
+		assertNotEquals(a, SurpriseDropsHelper.assignAll(10L, tables, pool));
+	}
+
+	@Test
+	void assignAllRepeatsEvenlyWhenTablesOutnumberItems() {
+		List<String> tables = IntStream.range(0, 7).mapToObj(i -> "t" + i).toList();
+		java.util.Map<String, String> a = SurpriseDropsHelper.assignAll(3L, tables, POOL);
+		java.util.Map<String, Long> counts = a.values().stream()
+				.collect(java.util.stream.Collectors.groupingBy(v -> v, java.util.stream.Collectors.counting()));
+		assertEquals(3, counts.size(), "every item used");
+		assertTrue(counts.values().stream().allMatch(c -> c == 2 || c == 3), counts.toString());
+		assertTrue(SurpriseDropsHelper.assignAll(3L, tables, List.of()).isEmpty());
+	}
+
+	@Test
 	void rollCountStaysInRangeAndAveragesNearMiddle() {
 		RandomSource random = RandomSource.create(123L);
 		long sum = 0;
